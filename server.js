@@ -66,22 +66,33 @@ console.log('🌐 Allowed CORS origins:', allowedOrigins);
 app.use(bodyParser.json());
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow Postman, curl, Android WebView (null origin)
+    // Allow requests with no origin (mobile apps, Postman, curl, same-origin)
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
 
-    return callback(new Error('CORS blocked: ' + origin));
+    console.warn('⚠️ CORS blocked:', origin);
+    return callback(new Error('CORS policy: Origin not allowed'));
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
 app.use(express.static(__dirname));
 
 // Home route
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Swagger JSON endpoint (needed for Swagger UI)
+app.get('/api-docs.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.json(swaggerSpec);
 });
 
 /* ============ DATABASE INITIALIZATION ============ */
@@ -295,10 +306,14 @@ app.use("/api/notifications", notificationRoutes);
 
 /* ============ SWAGGER API DOCUMENTATION ============ */
 
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+// Serve Swagger UI
+app.use("/api-docs", swaggerUi.serve);
+app.get("/api-docs", swaggerUi.setup(swaggerSpec, {
     swaggerOptions: {
         persistAuthorization: true,
-        displayOperationId: false
+        displayOperationId: false,
+        supportedSubmitMethods: ['get', 'post', 'put', 'delete', 'patch'],
+        tryItOutEnabled: true
     },
     customCss: `.swagger-ui .topbar {background-color:#1976d2}`,
     customSiteTitle: "HRMS API Documentation - Modular"

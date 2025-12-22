@@ -35,7 +35,12 @@ const swaggerSpec = {
 
 **Token = candidate_id from database (e.g., CAN1735000001)**`
     },
-    servers: [{ url: process.env.BASE_URL || "http://localhost:3000", description: "Local server" }],
+    servers: [
+        { 
+            url: process.env.API_BASE_URL || "http://localhost:3000", 
+            description: process.env.NODE_ENV === 'production' ? "Production Server" : "Development Server"
+        }
+    ],
     components: {
         securitySchemes: {
             bearerAuth: {
