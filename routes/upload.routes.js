@@ -35,32 +35,65 @@ router.post("/employees", auth, admin, upload.single("file"), async (req, res) =
 
             // ---- Master Data Lookups ----
             const locationName = r.Location || r.LocationName || null;
+            const locationCountry = r.LocationCountry || r['Location Country'] || null;
             const departmentName = r.Department || null;
             const subDepartmentName = r.SubDepartment || r['Sub Department'] || null;
             const designationName = r.Designation || r.JobTitle || null;
-            const secondaryDesignationName = r.SecondaryDesignation || r['Secondary Designation'] || null;
+            const secondaryDesignationName = r.SecondaryDesignation || r.SecondaryJobTitle || r['Secondary Designation'] || null;
             const buName = r.BusinessUnit || null;
             const legalName = r.LegalEntity || null;
             const costCenterCode = r.CostCenter || r.CostCenterCode || null;
             const bandName = r.Band || null;
             const payGradeName = r.PayGrade || r['Pay Grade'] || null;
             
-            // Policy lookups
+            // Policy lookups - matching exact Excel column names
             const leavePlanName = r.LeavePlan || r['Leave Plan'] || null;
-            const shiftPolicyName = r.ShiftPolicy || r['Shift Policy'] || null;
-            const weeklyOffPolicyName = r.WeeklyOffPolicy || r['Weekly Off Policy'] || null;
-            const attendancePolicyName = r.AttendancePolicy || r['Attendance Policy'] || null;
+            const shiftPolicyName = r.ShiftPolicyName || r.ShiftPolicy || r['Shift Policy'] || null;
+            const weeklyOffPolicyName = r.WeeklyOffPolicyName || r.WeeklyOffPolicy || r['Weekly Off Policy'] || null;
+            const attendancePolicyName = r.AttendanceTimeTrackingPolicy || r.AttendancePolicy || r['Attendance Policy'] || null;
             const attendanceCaptureSchemeName = r.AttendanceCaptureScheme || r['Attendance Capture Scheme'] || null;
-            const holidayListName = r.HolidayList || r['Holiday List'] || null;
-            const expensePolicyName = r.ExpensePolicy || r['Expense Policy'] || null;
+            const holidayListName = r.HolidayListName || r.HolidayList || r['Holiday List'] || null;
+            const expensePolicyName = r.ExpensePolicyName || r.ExpensePolicy || r['Expense Policy'] || null;
 
             // ---- Ensure master data exists and get IDs (only if value provided) ----
             console.log(`\n📋 Processing Employee: ${empNo} - ${r.FullName || r.Name || ''}`);
             console.log(`   Master Data: Location="${locationName}", Dept="${departmentName}", Desig="${designationName}"`);
             
-            const locationId = locationName ? await getOrCreateMaster(c, 'locations', 'name', locationName) : null;
+            // Create/update location with country
+            let locationId = null;
+            if (locationName) {
+                const [existingLoc] = await c.query('SELECT id FROM locations WHERE name = ?', [locationName]);
+                if (existingLoc.length) {
+                    locationId = existingLoc[0].id;
+                    if (locationCountry) {
+                        await c.query('UPDATE locations SET country = ? WHERE id = ?', [locationCountry, locationId]);
+                    }
+                } else {
+                    const [newLoc] = await c.query('INSERT INTO locations (name, country) VALUES (?, ?)', [locationName, locationCountry]);
+                    locationId = newLoc.insertId;
+                }
+            }
             const deptId = departmentName ? await getOrCreateMaster(c, 'departments', 'name', departmentName) : null;
-            const subDeptId = subDepartmentName ? await getOrCreateMaster(c, 'sub_departments', 'name', subDepartmentName) : null;
+            
+            // Sub-department needs parent department_id
+            let subDeptId = null;
+            if (subDepartmentName && deptId) {
+                const [existingSubDept] = await c.query(
+                    'SELECT id FROM sub_departments WHERE name = ? AND department_id = ?', 
+                    [subDepartmentName, deptId]
+                );
+                if (existingSubDept.length) {
+                    subDeptId = existingSubDept[0].id;
+                } else {
+                    const [newSubDept] = await c.query(
+                        'INSERT INTO sub_departments (name, department_id) VALUES (?, ?)', 
+                        [subDepartmentName, deptId]
+                    );
+                    subDeptId = newSubDept.insertId;
+                    console.log(`✓ Created new sub_departments: ${subDepartmentName} (ID: ${subDeptId})`);
+                }
+            }
+            
             const desgId = designationName ? await getOrCreateMaster(c, 'designations', 'name', designationName) : null;
             const secondaryDesgId = secondaryDesignationName ? await getOrCreateMaster(c, 'designations', 'name', secondaryDesignationName) : null;
             const buId = buName ? await getOrCreateMaster(c, 'business_units', 'name', buName) : null;
@@ -82,12 +115,25 @@ router.post("/employees", auth, admin, upload.single("file"), async (req, res) =
 
             // Reporting Manager lookup (by EmployeeNumber)
             let reportingManagerId = null;
-            if (r.ReportingManager || r['Reporting Manager']) {
+            if (r.ReportingManager || r['Reporting Manager'] || r.ReportingManagerEmployeeNumber) {
                 const [mgr] = await c.query(
                     `SELECT id FROM employees WHERE EmployeeNumber = ? LIMIT 1`,
-                    [r.ReportingManager || r['Reporting Manager']]
+                    [r.ReportingManager || r['Reporting Manager'] || r.ReportingManagerEmployeeNumber]
                 );
                 if (mgr.length > 0) reportingManagerId = mgr[0].id;
+            }
+            
+            // Dotted Line Manager lookup (by EmployeeNumber)
+            let dottedLineManagerId = null;
+            if (r.DottedLineManager || r['Dotted Line Manager']) {
+                const dottedMgrNum = String(r.DottedLineManager || r['Dotted Line Manager']).trim();
+                if (dottedMgrNum && dottedMgrNum !== 'Not Applicable' && dottedMgrNum !== 'N/A') {
+                    const [dMgr] = await c.query(
+                        `SELECT id FROM employees WHERE EmployeeNumber = ? LIMIT 1`,
+                        [dottedMgrNum]
+                    );
+                    if (dMgr.length > 0) dottedLineManagerId = dMgr[0].id;
+                }
             }
 
             // ---- Check employee exists ----
@@ -158,6 +204,7 @@ router.post("/employees", auth, admin, upload.single("file"), async (req, res) =
                         PayGradeId = ?,
                         CostCenterId = ?,
                         reporting_manager_id = ?,
+                        dotted_line_manager_id = ?,
                         leave_plan_id = ?,
                         shift_policy_id = ?,
                         weekly_off_policy_id = ?,
@@ -231,6 +278,7 @@ router.post("/employees", auth, admin, upload.single("file"), async (req, res) =
                         payGradeId,
                         costId,
                         reportingManagerId,
+                        dottedLineManagerId,
                         leavePlanId,
                         shiftPolicyId,
                         weeklyOffPolicyId,
@@ -286,14 +334,14 @@ router.post("/employees", auth, admin, upload.single("file"), async (req, res) =
                       father_name, mother_name, spouse_name, children_names,
                       DateJoined, time_type, worker_type, EmploymentStatus, notice_period,
                       LocationId, DepartmentId, SubDepartmentId, DesignationId, SecondaryDesignationId,
-                      BusinessUnitId, LegalEntityId, BandId, PayGradeId, CostCenterId, reporting_manager_id,
+                      BusinessUnitId, LegalEntityId, BandId, PayGradeId, CostCenterId, reporting_manager_id, dotted_line_manager_id,
                       leave_plan_id, shift_policy_id, weekly_off_policy_id, attendance_policy_id, 
                       attendance_capture_scheme_id, holiday_list_id, expense_policy_id,
                       PANNumber, AadhaarNumber, pf_number, uan_number,
                       lpa, basic_pct, hra_pct, medical_allowance, transport_allowance, special_allowance,
                       paid_basic_monthly, working_days, loss_of_days,
                       exit_date, exit_status, termination_type, termination_reason, resignation_note, comments)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
                     [
                         empNo,
                         r.attendance_number || r.AttendanceNumber || null,
@@ -341,6 +389,7 @@ router.post("/employees", auth, admin, upload.single("file"), async (req, res) =
                         payGradeId,
                         costId,
                         reportingManagerId,
+                        dottedLineManagerId,
                         leavePlanId,
                         shiftPolicyId,
                         weeklyOffPolicyId,
@@ -374,26 +423,40 @@ router.post("/employees", auth, admin, upload.single("file"), async (req, res) =
 
         } catch (err) {
             skipped++;
-            const errorMsg = `Row ${inserted + updated + skipped}: ${err.message}`;
+            const errorMsg = `Row ${inserted + updated + skipped} (Employee: ${r.EmployeeNumber || 'Unknown'}): ${err.message}`;
             errors.push(errorMsg);
-            console.error('Employee upload error:', errorMsg);
+            console.error('❌ Employee upload error:', errorMsg);
+            if (err.stack) console.error('Stack:', err.stack.split('\n').slice(0, 3).join('\n'));
         }
     }
 
     // Get master data counts after upload
-    const [masterCounts] = await c.query(`
-        SELECT 
-            'locations' as table_name, COUNT(*) as count FROM locations
-        UNION ALL SELECT 'departments', COUNT(*) FROM departments
-        UNION ALL SELECT 'designations', COUNT(*) FROM designations
-        UNION ALL SELECT 'business_units', COUNT(*) FROM business_units
-        UNION ALL SELECT 'legal_entities', COUNT(*) FROM legal_entities
-        UNION ALL SELECT 'cost_centers', COUNT(*) FROM cost_centers
-        UNION ALL SELECT 'bands', COUNT(*) FROM bands
-        UNION ALL SELECT 'pay_grades', COUNT(*) FROM pay_grades
-        UNION ALL SELECT 'leave_plans', COUNT(*) FROM leave_plans
-        UNION ALL SELECT 'shift_policies', COUNT(*) FROM shift_policies
-    `);
+    let masterCounts = [];
+    try {
+        const [counts] = await c.query(`
+            SELECT 
+                'locations' as table_name, COUNT(*) as count FROM locations
+            UNION ALL SELECT 'departments', COUNT(*) FROM departments
+            UNION ALL SELECT 'sub_departments', COUNT(*) FROM sub_departments
+            UNION ALL SELECT 'designations', COUNT(*) FROM designations
+            UNION ALL SELECT 'business_units', COUNT(*) FROM business_units
+            UNION ALL SELECT 'legal_entities', COUNT(*) FROM legal_entities
+            UNION ALL SELECT 'cost_centers', COUNT(*) FROM cost_centers
+            UNION ALL SELECT 'bands', COUNT(*) FROM bands
+            UNION ALL SELECT 'pay_grades', COUNT(*) FROM pay_grades
+            UNION ALL SELECT 'leave_plans', COUNT(*) FROM leave_plans
+            UNION ALL SELECT 'shift_policies', COUNT(*) FROM shift_policies
+            UNION ALL SELECT 'weekly_off_policies', COUNT(*) FROM weekly_off_policies
+            UNION ALL SELECT 'attendance_policies', COUNT(*) FROM attendance_policies
+            UNION ALL SELECT 'attendance_capture_schemes', COUNT(*) FROM attendance_capture_schemes
+            UNION ALL SELECT 'holiday_lists', COUNT(*) FROM holiday_lists
+            UNION ALL SELECT 'expense_policies', COUNT(*) FROM expense_policies
+        `);
+        masterCounts = counts;
+    } catch (countErr) {
+        console.error('❌ Error fetching master counts:', countErr.message);
+        masterCounts = [];
+    }
     
     c.end();
 
@@ -529,10 +592,11 @@ router.post("/payroll", auth, admin, upload.single("file"), async (req, res) => 
         // Create payroll run
         const runMonth = req.body.month || new Date().getMonth() + 1;
         const runYear = req.body.year || new Date().getFullYear();
+        const payrollType = req.body.payroll_type || rows[0]?.payroll_type || 'regular';
         
         const [runResult] = await c.query(
-            "INSERT INTO payroll_runs (month, year, status, created_by) VALUES (?, ?, 'processing', ?)",
-            [runMonth, runYear, req.user?.id || 1]
+            "INSERT INTO payroll_runs (payroll_month, payroll_type) VALUES (?, ?)",
+            [`${runYear}-${String(runMonth).padStart(2, '0')}`, payrollType]
         );
         const runId = runResult.insertId;
 
@@ -558,32 +622,99 @@ router.post("/payroll", auth, admin, upload.single("file"), async (req, res) => 
                 }
 
                 const empId = emp[0].id;
-                const month = r.month || r.Month || runMonth;
-                const year = r.year || r.Year || runYear;
-                const basic = parseFloat(r.basic || r.Basic || 0);
-                const hra = parseFloat(r.hra || r.HRA || 0);
-                const conveyance = parseFloat(r.conveyance || r.Conveyance || 0);
-                const specialAllowance = parseFloat(r.special_allowance || r.SpecialAllowance || 0);
-                const grossSalary = parseFloat(r.gross_salary || r.GrossSalary || (basic + hra + conveyance + specialAllowance));
-                const pf = parseFloat(r.pf || r.PF || 0);
-                const esi = parseFloat(r.esi || r.ESI || 0);
-                const professionalTax = parseFloat(r.professional_tax || r.ProfessionalTax || 0);
-                const otherDeductions = parseFloat(r.other_deductions || r.OtherDeductions || 0);
-                const totalDeductions = pf + esi + professionalTax + otherDeductions;
-                const netSalary = grossSalary - totalDeductions;
-                const daysWorked = parseInt(r.days_worked || r.DaysWorked || 30);
-                const daysInMonth = parseInt(r.days_in_month || r.DaysInMonth || 30);
+                
+                // Parse all payroll components from Excel
+                const parseNum = (val) => parseFloat(val || 0) || 0;
+                const parseInt2 = (val) => parseInt(val || 0) || 0;
+                
+                // Basic info
+                const payrollMonth = r.payroll_month || `${runYear}-${String(runMonth).padStart(2, '0')}`;
+                const employmentStatus = r.employment_status || r.EmploymentStatus || null;
+                const dateOfJoining = r.date_of_joining || r.DateOfJoining || null;
+                const dateOfBirth = r.date_of_birth || r.DateOfBirth || null;
+                const locationName = r.location || r.Location || null;
+                const departmentName = r.department || r.Department || null;
+                const jobTitle = r.job_title || r.JobTitle || null;
+                const payrollStatus = r.status || r.Status || 'processed';
+                const statusDescription = r.status_description || r.StatusDescription || null;
+                const warnings = r.warnings || r.Warnings || null;
+                
+                // Days calculation
+                const actualPayableDays = parseNum(r.actual_payable_days);
+                const workingDays = parseNum(r.working_days);
+                const lossOfPayDays = parseNum(r.loss_of_pay_days);
+                const daysPayable = parseNum(r.days_payable);
+                const payableUnits = parseNum(r.payable_units);
+                const remunerationAmount = parseNum(r.remuneration_amount);
+                
+                // Earnings
+                const basic = parseNum(r.basic);
+                const hra = parseNum(r.hra);
+                const medicalAllowance = parseNum(r.medical_allowance);
+                const transportAllowance = parseNum(r.transport_allowance);
+                const specialAllowance = parseNum(r.special_allowance);
+                const mealCoupons = parseNum(r.meal_coupons);
+                const mobileInternetAllowance = parseNum(r.mobile_internet_allowance);
+                const newspaperJournalAllowance = parseNum(r.newspaper_journal_allowance);
+                const childEducationAllowance = parseNum(r.child_education_allowance);
+                const incentives = parseNum(r.incentives);
+                const otherReimbursement = parseNum(r.other_reimbursement);
+                const relocationBonus = parseNum(r.relocation_bonus);
+                const grossAmount = parseNum(r.gross_a);
+                
+                // Employer contributions
+                const pfEmployer = parseNum(r.pf_employer);
+                const esiEmployer = parseNum(r.esi_employer);
+                const totalEmployerContributions = parseNum(r.total || (pfEmployer + esiEmployer));
+                
+                // Employee deductions
+                const pfEmployee = parseNum(r.pf_employee);
+                const esiEmployee = parseNum(r.esi_employee);
+                const totalContributions = parseNum(r.total_contributions_b);
+                const professionalTax = parseNum(r.professional_tax);
+                const totalIncomeTax = parseNum(r.total_income_tax);
+                const loanDeduction = parseNum(r.loan_deduction);
+                const mealCouponServiceCharge = parseNum(r.meal_coupon_service_charge);
+                const otherDeduction = parseNum(r.other_deduction);
+                const mealCouponDeduction = parseNum(r.meal_coupon);
+                const totalDeductions = parseNum(r.total_deductions_c);
+                
+                // Net pay
+                const netPay = parseNum(r.net_pay);
+                const cashAdvance = parseNum(r.cash_advance_d);
+                const settlementAgainstAdvance = parseNum(r.settlement_against_advance_e);
+                const socialMediaLoginInvoice = parseNum(r.socialmedia_login_invoice);
+                const totalReimbursements = parseNum(r.total_reimbursements_f);
+                const totalNetPay = parseNum(r.total_net_pay);
 
-                // Insert payslip
+                // Insert payslip with all 53 columns
                 await c.query(
                     `INSERT INTO payroll_slips 
-                     (run_id, employee_id, month, year, basic, hra, conveyance, special_allowance, 
-                      gross_salary, pf, esi, professional_tax, other_deductions, total_deductions, 
-                      net_salary, days_worked, days_in_month, status) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated')`,
-                    [runId, empId, month, year, basic, hra, conveyance, specialAllowance,
-                     grossSalary, pf, esi, professionalTax, otherDeductions, totalDeductions,
-                     netSalary, daysWorked, daysInMonth]
+                     (payroll_run_id, employee_id, employment_status, date_of_joining, date_of_birth,
+                      location_name, department_name, job_title, payroll_status, status_description, warnings,
+                      actual_payable_days, working_days, loss_of_pay_days, days_payable, payable_units, remuneration_amount,
+                      basic, hra, medical_allowance, transport_allowance, special_allowance,
+                      meal_coupons, mobile_internet_allowance, newspaper_journal_allowance, child_education_allowance,
+                      incentives, other_reimbursement, relocation_bonus, gross_amount,
+                      pf_employer, esi_employer, total_employer_contributions,
+                      pf_employee, esi_employee, total_contributions,
+                      professional_tax, total_income_tax, loan_deduction, meal_coupon_service_charge,
+                      other_deduction, meal_coupon_deduction, total_deductions,
+                      net_pay, cash_advance, settlement_against_advance, social_media_login_invoice,
+                      total_reimbursements, total_net_pay) 
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                    [runId, empId, employmentStatus, dateOfJoining, dateOfBirth,
+                     locationName, departmentName, jobTitle, payrollStatus, statusDescription, warnings,
+                     actualPayableDays, workingDays, lossOfPayDays, daysPayable, payableUnits, remunerationAmount,
+                     basic, hra, medicalAllowance, transportAllowance, specialAllowance,
+                     mealCoupons, mobileInternetAllowance, newspaperJournalAllowance, childEducationAllowance,
+                     incentives, otherReimbursement, relocationBonus, grossAmount,
+                     pfEmployer, esiEmployer, totalEmployerContributions,
+                     pfEmployee, esiEmployee, totalContributions,
+                     professionalTax, totalIncomeTax, loanDeduction, mealCouponServiceCharge,
+                     otherDeduction, mealCouponDeduction, totalDeductions,
+                     netPay, cashAdvance, settlementAgainstAdvance, socialMediaLoginInvoice,
+                     totalReimbursements, totalNetPay]
                 );
 
                 inserted++;
@@ -593,12 +724,6 @@ router.post("/payroll", auth, admin, upload.single("file"), async (req, res) => 
                 errors.push(err.message);
             }
         }
-
-        // Update run status
-        await c.query(
-            "UPDATE payroll_runs SET status = 'completed', completed_at = NOW() WHERE id = ?",
-            [runId]
-        );
 
         c.end();
         res.json({

@@ -18,7 +18,22 @@ const swaggerSpec = {
     info: {
         title: "HRMS API - Modular Version",
         version: "2.0.0",
-        description: "Human Resource Management System API - Modular Architecture with Auth, Employees, Payroll, Attendance, Timesheets, and more. Features hybrid work support (Office/WFH/Remote), leave management, and comprehensive reporting."
+        description: `Human Resource Management System API - Modular Architecture with Auth, Employees, Payroll, Attendance, Timesheets, and more. Features hybrid work support (Office/WFH/Remote), leave management, and comprehensive reporting.
+
+**🎯 Pre-Onboarding Workflow - Quick Test Guide:**
+
+1. **Login**: POST /api/auth/login (username: admin, password: admin123)
+2. **Create Candidate**: POST /api/candidates (after interview rounds)
+3. **Start Pre-onboarding**: POST /api/candidates/{id}/start-preonboarding
+4. **Create Offer**: POST /api/candidates/{id}/create-offer (4 workflows)
+5. **Send Offer**: POST /api/candidates/{id}/preview-send-offer (email sent)
+6. **Candidate Views**: GET /api/candidates/{id}/view-offer/{token} (no auth)
+7. **Candidate Approves**: POST /api/candidates/{id}/approve-offer/{token} (no auth)
+8. **Update Status**: POST /api/candidates/{id}/update-status
+9. **Hire**: POST /api/candidates/{id}/hire-as-employee
+10. **Convert**: POST /api/candidates/{id}/convert-to-employee
+
+**Token = candidate_id from database (e.g., CAN1735000001)**`
     },
     servers: [{ url: process.env.BASE_URL || "http://localhost:3000", description: "Local server" }],
     components: {
@@ -1997,6 +2012,327 @@ const swaggerSpec = {
                                 } 
                             } 
                         } 
+                    }
+                }
+            }
+        },
+        "/api/candidates/{id}/start-preonboarding": {
+            post: {
+                summary: "▶️ Start Pre-onboarding for Candidate",
+                description: "HR/Executive starts pre-onboarding process. Displays candidate details with email and mobile. Status changes to 'documents_pending'.",
+                tags: ["🎯 Candidates & Pre-onboarding"],
+                parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" }, description: "Candidate ID" }],
+                responses: {
+                    200: {
+                        description: "Pre-onboarding started",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    success: true,
+                                    message: "Pre-onboarding started",
+                                    candidate: {
+                                        id: 1,
+                                        candidate_id: "CAN1735000001",
+                                        first_name: "John",
+                                        last_name: "Doe",
+                                        email: "john.doe@example.com",
+                                        phone: "9876543210",
+                                        status: "documents_pending"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/candidates/{id}/create-offer": {
+            post: {
+                summary: "📝 Create Offer (4 Workflows: Job → Compensation → Offer → Preview)",
+                description: "Create/update offer details with 4-step workflow: Job Details, Compensation, Offer Details, Preview",
+                tags: ["🎯 Candidates & Pre-onboarding"],
+                parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    position: { type: "string", example: "Software Engineer" },
+                                    designation_id: { type: "integer", example: 1 },
+                                    department_id: { type: "integer", example: 2 },
+                                    location_id: { type: "integer", example: 1 },
+                                    reporting_manager_id: { type: "integer", example: 5 },
+                                    joining_date: { type: "string", format: "date", example: "2025-02-01" },
+                                    offered_ctc: { type: "number", example: 800000 },
+                                    annual_salary: { type: "number", example: 800000 },
+                                    salary_breakup: { type: "object", example: { basic: 400000, hra: 200000, special: 200000 } },
+                                    offer_validity_date: { type: "string", format: "date", example: "2025-01-15" },
+                                    probation_period: { type: "integer", example: 3, description: "Months" },
+                                    notice_period: { type: "integer", example: 2, description: "Months" },
+                                    work_mode: { type: "string", enum: ["Office", "WFH", "Hybrid", "Remote"], example: "Hybrid" },
+                                    special_terms: { type: "string", example: "Relocation assistance provided" },
+                                    benefits: { type: "string", example: "Health insurance, meal coupons" }
+                                }
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: "Offer details saved",
+                        content: {
+                            "application/json": {
+                                example: { success: true, message: "Offer details saved. Ready to preview and send." }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/candidates/{id}/preview-send-offer": {
+            post: {
+                summary: "📧 Preview and Send Offer Letter",
+                description: "Send offer letter to candidate via email with unique token link for approval/rejection",
+                tags: ["🎯 Candidates & Pre-onboarding"],
+                parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+                responses: {
+                    200: {
+                        description: "Offer letter sent",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    success: true,
+                                    message: "Offer letter sent to candidate email",
+                                    preview: {
+                                        candidate: {
+                                            id: 1,
+                                            full_name: "John Doe",
+                                            email: "john.doe@example.com",
+                                            position: "Software Engineer",
+                                            offered_ctc: 800000,
+                                            joining_date: "2025-02-01"
+                                        },
+                                        offer_details: {
+                                            annual_salary: 800000,
+                                            offer_validity_date: "2025-01-15",
+                                            work_mode: "Hybrid"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/candidates/{id}/view-offer/{token}": {
+            get: {
+                summary: "👁️ View Offer (Candidate Portal - No Auth)",
+                description: "Candidate views offer letter using token link from email. Public access - no authentication required.",
+                tags: ["🎯 Candidates & Pre-onboarding"],
+                security: [],
+                parameters: [
+                    { name: "id", in: "path", required: true, schema: { type: "integer" } },
+                    { name: "token", in: "path", required: true, schema: { type: "string" }, description: "Candidate ID token from email" }
+                ],
+                responses: {
+                    200: {
+                        description: "Offer details",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    candidate: {
+                                        id: 1,
+                                        full_name: "John Doe",
+                                        email: "john.doe@example.com",
+                                        phone: "9876543210",
+                                        position: "Software Engineer",
+                                        department_name: "Engineering",
+                                        location_name: "Mumbai",
+                                        offered_ctc: 800000,
+                                        joining_date: "2025-02-01",
+                                        status: "offered"
+                                    },
+                                    offer_details: {
+                                        annual_salary: 800000,
+                                        offer_validity_date: "2025-01-15",
+                                        probation_period: 3,
+                                        work_mode: "Hybrid"
+                                    },
+                                    status: "offered"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/candidates/{id}/approve-offer/{token}": {
+            post: {
+                summary: "✅ Approve Offer (Candidate Action - No Auth)",
+                description: "Candidate approves/accepts offer. Auto-assigns pre-onboarding tasks. Status changes to 'offer_accepted'.",
+                tags: ["🎯 Candidates & Pre-onboarding"],
+                security: [],
+                parameters: [
+                    { name: "id", in: "path", required: true, schema: { type: "integer" } },
+                    { name: "token", in: "path", required: true, schema: { type: "string" } }
+                ],
+                responses: {
+                    200: {
+                        description: "Offer approved",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    success: true,
+                                    message: "Offer approved successfully! Pre-onboarding tasks assigned.",
+                                    status: "Approved"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/candidates/{id}/reject-offer/{token}": {
+            post: {
+                summary: "❌ Reject Offer (Candidate Action - No Auth)",
+                description: "Candidate rejects/declines offer. Status changes to 'offer_declined'.",
+                tags: ["🎯 Candidates & Pre-onboarding"],
+                security: [],
+                parameters: [
+                    { name: "id", in: "path", required: true, schema: { type: "integer" } },
+                    { name: "token", in: "path", required: true, schema: { type: "string" } }
+                ],
+                requestBody: {
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    reason: { type: "string", example: "Found another opportunity" }
+                                }
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: "Offer rejected",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    success: true,
+                                    message: "Offer rejected. Thank you for your time.",
+                                    status: "Rejected"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/candidates/{id}/update-status": {
+            post: {
+                summary: "🔄 Update Candidate Status",
+                description: "Update candidate status: offered, offer_accepted, offer_declined, documents_pending, bgv_initiated, bgv_completed, ready_to_join, joined, dropped_out",
+                tags: ["🎯 Candidates & Pre-onboarding"],
+                parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["status"],
+                                properties: {
+                                    status: { 
+                                        type: "string", 
+                                        enum: ["offered", "offer_accepted", "offer_declined", "documents_pending", "bgv_initiated", "bgv_completed", "ready_to_join", "joined", "dropped_out"],
+                                        example: "bgv_completed" 
+                                    },
+                                    remarks: { type: "string", example: "Background verification cleared" }
+                                }
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: "Status updated",
+                        content: {
+                            "application/json": {
+                                example: { success: true, message: "Candidate status updated to bgv_completed", status: "bgv_completed" }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/candidates/{id}/hire-as-employee": {
+            post: {
+                summary: "🎉 Hire as Employee (Ready to Join)",
+                description: "Mark candidate as 'Ready to Join' after document verification. Prepares for onboarding on joining date.",
+                tags: ["🎯 Candidates & Pre-onboarding"],
+                parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+                responses: {
+                    200: {
+                        description: "Candidate ready to join",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    success: true,
+                                    message: "Candidate marked as 'Ready to Join'. Onboarding can now be initiated.",
+                                    next_step: "Convert to employee on joining date"
+                                }
+                            }
+                        }
+                    },
+                    400: {
+                        description: "Pending document verification",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    error: "Cannot hire: Pending document verification",
+                                    pending_documents: 3
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/candidates/{id}/put-on-hold": {
+            post: {
+                summary: "⏸️ Put Candidate on Hold",
+                description: "Temporarily pause candidate process with reason",
+                tags: ["🎯 Candidates & Pre-onboarding"],
+                parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+                requestBody: {
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    reason: { type: "string", example: "Delayed joining date - will resume next month" }
+                                }
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: "Candidate on hold",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    success: true,
+                                    message: "Candidate put on hold",
+                                    action: "Manual follow-up required"
+                                }
+                            }
+                        }
                     }
                 }
             }

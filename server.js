@@ -5,6 +5,9 @@
  * All functionality remains the same, just better organized
  */
 
+// Load environment variables
+require('dotenv').config();
+
 const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require('cors');
@@ -51,9 +54,29 @@ const notificationRoutes = require("./routes/notification.routes");
 const app = express();
 const upload = multer({ dest: "uploads/" });
 
+// CORS Configuration for Production
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
+console.log('🌐 Allowed CORS origins:', allowedOrigins);
+
 // Middleware
 app.use(bodyParser.json());
-app.use(cors());
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow Postman, curl, Android WebView (null origin)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error('CORS blocked: ' + origin));
+  },
+  credentials: true
+}));
 app.use(express.static(__dirname));
 
 // Home route
@@ -321,13 +344,17 @@ app.get("/api/health", (req, res) => {
         console.log("✅ Admin user ready\n");
 
         const PORT = process.env.PORT || 3000;
+        const ENV = process.env.NODE_ENV || 'development';
+        
         app.listen(PORT, () => {
             console.log(`\n╔══════════════════════════════════════════════╗`);
             console.log(`║     HRMS API Server (Modular)                ║`);
             console.log(`╠══════════════════════════════════════════════╣`);
-            console.log(`║ Port: ${PORT}                                   ║`);
+            console.log(`║ Environment: ${ENV.padEnd(32)} ║`);
+            console.log(`║ Port: ${String(PORT).padEnd(39)} ║`);
             console.log(`║ API Docs: http://localhost:${PORT}/api-docs     ║`);
             console.log(`║ Home: http://localhost:${PORT}/                 ║`);
+            console.log(`║ API Base: ${(process.env.API_BASE_URL || `http://localhost:${PORT}`).padEnd(33)} ║`);
             console.log(`║ Default Login: admin / admin123              ║`);
             console.log(`║                                              ║`);
             console.log(`║ 📁 Modular Structure:                        ║`);

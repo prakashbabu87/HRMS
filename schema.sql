@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS locations (
   id INT PRIMARY KEY AUTO_INCREMENT,
   name VARCHAR(100) UNIQUE NOT NULL,
+  country VARCHAR(100),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -230,6 +231,7 @@ CREATE TABLE IF NOT EXISTS employees (
   PayGradeId INT,
   CostCenterId INT,
   reporting_manager_id INT,
+  dotted_line_manager_id INT,
 
   -- =========================
   -- Policies
@@ -305,7 +307,8 @@ CREATE TABLE IF NOT EXISTS employees (
   FOREIGN KEY (attendance_capture_scheme_id) REFERENCES attendance_capture_schemes(id),
   FOREIGN KEY (holiday_list_id) REFERENCES holiday_lists(id),
   FOREIGN KEY (expense_policy_id) REFERENCES expense_policies(id),
-  FOREIGN KEY (reporting_manager_id) REFERENCES employees(id)
+  FOREIGN KEY (reporting_manager_id) REFERENCES employees(id),
+  FOREIGN KEY (dotted_line_manager_id) REFERENCES employees(id)
 );
 
 -- Employee Pay Details
@@ -420,7 +423,7 @@ CREATE TABLE IF NOT EXISTS leaves (
 CREATE TABLE IF NOT EXISTS payroll_runs (
   id INT PRIMARY KEY AUTO_INCREMENT,
   payroll_month VARCHAR(20),
-  payroll_type VARCHAR(50),
+  payroll_type VARCHAR(50) DEFAULT 'regular',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
