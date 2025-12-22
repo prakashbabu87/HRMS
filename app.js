@@ -17,7 +17,13 @@
  * ✅ Bulk uploads (Employees, Payroll, Holidays)
  * ✅ Swagger UI with sample responses
  */
+const path = require('path');
 
+require('dotenv').config({
+  path: path.resolve(process.cwd(), '.env.production')
+});
+
+const API_BASE_URL = process.env.API_BASE_URL;
 const express = require("express");
 const mysql = require("mysql2/promise");
 const jwt = require("jsonwebtoken");
@@ -28,6 +34,29 @@ const swaggerUi = require("swagger-ui-express");
 const bodyParser = require("body-parser");
 const fs = require("fs");
 const path = require("path");
+const cors = require('cors');
+
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
+console.log('Allowed origins:', allowedOrigins);
+
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow Postman, curl, Android WebView (null origin)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error('CORS blocked: ' + origin));
+  },
+  credentials: true
+}));
 
 const app = express();
 app.use(bodyParser.json());
@@ -39,7 +68,10 @@ app.use(express.static(__dirname));
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
- 
+
+const PORT = process.env.PORT || 4201;
+
+console.log('API_BASE_URL:', API_BASE_URL);
  
 
 // Ensure default admin user exists for testing
@@ -2960,7 +2992,7 @@ const swagger = {
         version: "1.0.0",
         description: "Human Resource Management System API with Auth, Employees, Payroll, Attendance, Timesheets, and more"
     },
-    servers: [{ url: process.env.BASE_URL || "http://localhost:3000", description: "Local server" }],
+    servers: [{ url:API_BASE_URL || "http://localhost:4201", description: "Local server" }],
     components: {
         securitySchemes: {
             bearerAuth: {
@@ -2993,7 +3025,7 @@ const swagger = {
                     JoiningDate: { type: "string", format: "date" }
                 }
             },
-            Attendance: {
+            Attendance: { 
                 type: "object",
                 properties: {
                     id: { type: "integer" },
@@ -4975,15 +5007,15 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swagger, {
         await ensureAdminUser();
         console.log("✅ Admin user ready\n");
 
-        const port = process.env.PORT || 3000;
-        app.listen(port, () => {
-            console.log(`
+        const port = process.env.PORT || 4201;
+      app.listen(PORT, '0.0.0.0', () => {
+  console.log(`
 ╔══════════════════════════════════════════════╗
 ║     HRMS API Server Started                  ║
 ╠══════════════════════════════════════════════╣
-║ Port: ${port}                                   ║
-║ API Docs: http://localhost:${port}/api-docs     ║
-║ Home: http://localhost:${port}/                 ║
+║ Port: ${PORT}                                   ║
+║ API Docs: http://localhost:${PORT}/api-docs     ║
+║ API Docs: http://localhost:${PORT}/index.html   ║
 ║ Default Login: admin / admin123              ║
 ╚══════════════════════════════════════════════╝
       `);
