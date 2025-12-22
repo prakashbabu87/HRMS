@@ -174,6 +174,497 @@ const swaggerSpec = {
                 }
             }
         },
+        "/api/auth/employee/check": {
+            get: {
+                summary: "🆕 Check Employee by Email",
+                description: "Check if employee exists by email and whether they have a user account created",
+                security: [],
+                tags: ["🔐 Authentication"],
+                parameters: [{
+                    name: "email",
+                    in: "query",
+                    required: true,
+                    schema: { type: "string", example: "john.doe@company.com" },
+                    description: "Employee work email"
+                }],
+                responses: {
+                    200: {
+                        description: "Employee check successful",
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object",
+                                    properties: {
+                                        found: { type: "boolean", example: true },
+                                        employee: {
+                                            type: "object",
+                                            properties: {
+                                                id: { type: "integer" },
+                                                EmployeeNumber: { type: "string" },
+                                                FullName: { type: "string" },
+                                                WorkEmail: { type: "string" },
+                                                JobTitle: { type: "string" },
+                                                Department: { type: "string" },
+                                                Location: { type: "string" },
+                                                Status: { type: "string" }
+                                            }
+                                        },
+                                        hasUserAccount: { type: "boolean", example: false },
+                                        userInfo: { 
+                                            type: "object",
+                                            nullable: true,
+                                            properties: {
+                                                id: { type: "integer" },
+                                                username: { type: "string" },
+                                                role: { type: "string" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    404: { description: "Employee not found" },
+                    400: { description: "Email parameter required" }
+                }
+            }
+        },
+        "/api/auth/user/create": {
+            post: {
+                summary: "🆕 Create User Account for Employee",
+                description: "Create user account with password for an existing employee. Email must match an employee's WorkEmail.",
+                security: [],
+                tags: ["🔐 Authentication"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["email", "password"],
+                                properties: {
+                                    email: { type: "string", example: "john.doe@company.com", description: "Must match employee WorkEmail" },
+                                    password: { type: "string", example: "SecurePass123!", description: "User login password" },
+                                    role: { type: "string", enum: ["employee", "hr", "manager", "admin"], default: "employee", description: "User role (default: employee)" }
+                                }
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: "User account created successfully",
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object",
+                                    properties: {
+                                        message: { type: "string" },
+                                        employee: {
+                                            type: "object",
+                                            properties: {
+                                                id: { type: "integer" },
+                                                employeeNumber: { type: "string" },
+                                                fullName: { type: "string" },
+                                                email: { type: "string" }
+                                            }
+                                        },
+                                        user: {
+                                            type: "object",
+                                            properties: {
+                                                username: { type: "string" },
+                                                role: { type: "string" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    404: { description: "Employee not found" },
+                    409: { description: "User account already exists" },
+                    400: { description: "Email and password required" }
+                }
+            }
+        },
+        "/api/auth/users": {
+            get: {
+                summary: "🆕 Get All Users",
+                description: "Get list of all user accounts with employee linkage (Admin/HR only)",
+                tags: ["🔐 Authentication"],
+                responses: {
+                    200: {
+                        description: "List of users",
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object",
+                                    properties: {
+                                        users: {
+                                            type: "array",
+                                            items: {
+                                                type: "object",
+                                                properties: {
+                                                    id: { type: "integer" },
+                                                    username: { type: "string" },
+                                                    role: { type: "string" },
+                                                    full_name: { type: "string" },
+                                                    created_at: { type: "string", format: "date-time" },
+                                                    employee_id: { type: "integer", nullable: true },
+                                                    EmployeeNumber: { type: "string", nullable: true },
+                                                    Status: { type: "string", nullable: true }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    403: { description: "Access denied" }
+                }
+            }
+        },
+        "/api/auth/users/{id}": {
+            get: {
+                summary: "🆕 Get User by ID",
+                description: "Get specific user details (Admin/HR or own account)",
+                tags: ["🔐 Authentication"],
+                parameters: [{
+                    name: "id",
+                    in: "path",
+                    required: true,
+                    schema: { type: "integer" }
+                }],
+                responses: {
+                    200: {
+                        description: "User details",
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object",
+                                    properties: {
+                                        user: {
+                                            type: "object",
+                                            properties: {
+                                                id: { type: "integer" },
+                                                username: { type: "string" },
+                                                role: { type: "string" },
+                                                full_name: { type: "string" },
+                                                created_at: { type: "string" },
+                                                updated_at: { type: "string" },
+                                                employee_id: { type: "integer" },
+                                                EmployeeNumber: { type: "string" },
+                                                emp_full_name: { type: "string" },
+                                                Status: { type: "string" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    404: { description: "User not found" },
+                    403: { description: "Access denied" }
+                }
+            },
+            delete: {
+                summary: "🆕 Delete User",
+                description: "Delete user account (Admin only)",
+                tags: ["🔐 Authentication"],
+                parameters: [{
+                    name: "id",
+                    in: "path",
+                    required: true,
+                    schema: { type: "integer" }
+                }],
+                responses: {
+                    200: { description: "User deleted successfully" },
+                    403: { description: "Access denied" }
+                }
+            }
+        },
+        "/api/auth/users/{id}/role": {
+            put: {
+                summary: "🆕 Update User Role",
+                description: "Change user role (Admin only)",
+                tags: ["🔐 Authentication"],
+                parameters: [{
+                    name: "id",
+                    in: "path",
+                    required: true,
+                    schema: { type: "integer" }
+                }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["role"],
+                                properties: {
+                                    role: { type: "string", enum: ["admin", "hr", "manager", "employee"], example: "hr" }
+                                }
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: { description: "User role updated successfully" },
+                    400: { description: "Valid role required" },
+                    403: { description: "Access denied" }
+                }
+            }
+        },
+        "/api/auth/users/{id}/make-hr": {
+            post: {
+                summary: "🆕 Make User HR",
+                description: "Promote user to HR role (Admin only). Quick action alternative to PUT /users/:id/role",
+                tags: ["🔐 Authentication"],
+                parameters: [{
+                    name: "id",
+                    in: "path",
+                    required: true,
+                    schema: { type: "integer" },
+                    description: "User ID to promote"
+                }],
+                responses: {
+                    200: {
+                        description: "User promoted to HR successfully",
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object",
+                                    properties: {
+                                        message: { type: "string", example: "User promoted to HR successfully" },
+                                        user: {
+                                            type: "object",
+                                            properties: {
+                                                id: { type: "integer" },
+                                                username: { type: "string" },
+                                                previousRole: { type: "string" },
+                                                newRole: { type: "string", example: "hr" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    404: { description: "User not found" },
+                    403: { description: "Access denied. Admin role required" }
+                }
+            }
+        },
+        "/api/auth/users/{id}/make-manager": {
+            post: {
+                summary: "🆕 Make User Manager",
+                description: "Promote user to Manager role (Admin only). Quick action alternative to PUT /users/:id/role",
+                tags: ["🔐 Authentication"],
+                parameters: [{
+                    name: "id",
+                    in: "path",
+                    required: true,
+                    schema: { type: "integer" },
+                    description: "User ID to promote"
+                }],
+                responses: {
+                    200: {
+                        description: "User promoted to Manager successfully",
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object",
+                                    properties: {
+                                        message: { type: "string", example: "User promoted to Manager successfully" },
+                                        user: {
+                                            type: "object",
+                                            properties: {
+                                                id: { type: "integer" },
+                                                username: { type: "string" },
+                                                previousRole: { type: "string" },
+                                                newRole: { type: "string", example: "manager" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    404: { description: "User not found" },
+                    403: { description: "Access denied. Admin role required" }
+                }
+            }
+        },
+        "/api/auth/users/{id}/make-admin": {
+            post: {
+                summary: "🆕 Make User Admin",
+                description: "Promote user to Admin role (Admin only). Quick action alternative to PUT /users/:id/role",
+                tags: ["🔐 Authentication"],
+                parameters: [{
+                    name: "id",
+                    in: "path",
+                    required: true,
+                    schema: { type: "integer" },
+                    description: "User ID to promote"
+                }],
+                responses: {
+                    200: {
+                        description: "User promoted to Admin successfully",
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object",
+                                    properties: {
+                                        message: { type: "string", example: "User promoted to Admin successfully" },
+                                        user: {
+                                            type: "object",
+                                            properties: {
+                                                id: { type: "integer" },
+                                                username: { type: "string" },
+                                                previousRole: { type: "string" },
+                                                newRole: { type: "string", example: "admin" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    404: { description: "User not found" },
+                    403: { description: "Access denied. Admin role required" }
+                }
+            }
+        },
+        "/api/auth/users/{id}/make-employee": {
+            post: {
+                summary: "🆕 Demote User to Employee",
+                description: "Change user role back to Employee (Admin only). Quick action alternative to PUT /users/:id/role",
+                tags: ["🔐 Authentication"],
+                parameters: [{
+                    name: "id",
+                    in: "path",
+                    required: true,
+                    schema: { type: "integer" },
+                    description: "User ID to demote"
+                }],
+                responses: {
+                    200: {
+                        description: "User role changed to Employee",
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object",
+                                    properties: {
+                                        message: { type: "string", example: "User role changed to Employee" },
+                                        user: {
+                                            type: "object",
+                                            properties: {
+                                                id: { type: "integer" },
+                                                username: { type: "string" },
+                                                previousRole: { type: "string" },
+                                                newRole: { type: "string", example: "employee" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    404: { description: "User not found" },
+                    403: { description: "Access denied. Admin role required" }
+                }
+            }
+        },
+        "/api/auth/users/bulk-role-update": {
+            post: {
+                summary: "🆕 Bulk Update User Roles",
+                description: "Update multiple user roles in one request (Admin only). Useful for batch promotions/demotions",
+                tags: ["🔐 Authentication"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["updates"],
+                                properties: {
+                                    updates: {
+                                        type: "array",
+                                        items: {
+                                            type: "object",
+                                            required: ["userId", "role"],
+                                            properties: {
+                                                userId: { type: "integer", example: 2 },
+                                                role: { type: "string", enum: ["admin", "hr", "manager", "employee"], example: "hr" }
+                                            }
+                                        },
+                                        example: [
+                                            { userId: 2, role: "hr" },
+                                            { userId: 3, role: "manager" },
+                                            { userId: 4, role: "employee" }
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: "Bulk update completed",
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object",
+                                    properties: {
+                                        message: { type: "string", example: "3 of 3 users updated successfully" },
+                                        results: {
+                                            type: "array",
+                                            items: {
+                                                type: "object",
+                                                properties: {
+                                                    userId: { type: "integer" },
+                                                    success: { type: "boolean" },
+                                                    role: { type: "string" },
+                                                    error: { type: "string" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    400: { description: "Invalid request format" },
+                    403: { description: "Access denied. Admin role required" }
+                }
+            }
+        },
+        "/api/auth/password/create": {
+            post: {
+                summary: "Create Password (Legacy)",
+                description: "Legacy endpoint - Use /api/auth/user/create instead",
+                tags: ["🔐 Authentication"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    employee_id: { type: "string" },
+                                    password: { type: "string" }
+                                }
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: { description: "Password set successfully" }
+                }
+            }
+        },
         
         // ============ EMPLOYEES ============
         "/api/employees": {

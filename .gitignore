@@ -1,5 +1,6 @@
 # Dependency directories
 node_modules/
+hrms-frontend/
 jspm_packages/
 
 # Debug logs

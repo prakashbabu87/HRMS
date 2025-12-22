@@ -162,9 +162,9 @@ router.post("/generate", auth, admin, async (req, res) => {
 router.get("/runs", auth, hr, async (req, res) => {
     const c = await db();
     const [runs] = await c.query(
-        `SELECT pr.*, COUNT(ps.id) as slip_count, SUM(ps.net_salary) as total_payout
+        `SELECT pr.*, COUNT(ps.id) as slip_count, SUM(ps.net_pay) as total_payout
          FROM payroll_runs pr
-         LEFT JOIN payroll_slips ps ON pr.id = ps.run_id
+         LEFT JOIN payroll_slips ps ON pr.id = ps.payroll_run_id
          GROUP BY pr.id
          ORDER BY pr.created_at DESC`
     );
