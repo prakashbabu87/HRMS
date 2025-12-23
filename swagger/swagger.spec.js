@@ -20,20 +20,90 @@ const swaggerSpec = {
         version: "2.0.0",
         description: `Human Resource Management System API - Modular Architecture with Auth, Employees, Payroll, Attendance, Timesheets, and more. Features hybrid work support (Office/WFH/Remote), leave management, and comprehensive reporting.
 
-**🎯 Pre-Onboarding Workflow - Quick Test Guide:**
+**🎯 Pre-Onboarding Workflow:**
+1. Login → 2. Create Candidate → 3. Start Pre-onboarding → 4. Create Offer → 5. Send Offer → 6. Candidate Views (no auth) → 7. Candidate Approves → 8. Update Status → 9. Hire → 10. Convert to Employee
 
-1. **Login**: POST /api/auth/login (username: admin, password: admin123)
-2. **Create Candidate**: POST /api/candidates (after interview rounds)
-3. **Start Pre-onboarding**: POST /api/candidates/{id}/start-preonboarding
-4. **Create Offer**: POST /api/candidates/{id}/create-offer (4 workflows)
-5. **Send Offer**: POST /api/candidates/{id}/preview-send-offer (email sent)
-6. **Candidate Views**: GET /api/candidates/{id}/view-offer/{token} (no auth)
-7. **Candidate Approves**: POST /api/candidates/{id}/approve-offer/{token} (no auth)
-8. **Update Status**: POST /api/candidates/{id}/update-status
-9. **Hire**: POST /api/candidates/{id}/hire-as-employee
-10. **Convert**: POST /api/candidates/{id}/convert-to-employee
+---
 
-**Token = candidate_id from database (e.g., CAN1735000001)**`
+**📝 Timesheet Workflow:**
+**Employee:** Check Assignment Status → Submit Regular/Project Timesheet (hourly breakdown) → View My Timesheets  
+**End of Month:** Upload Client Timesheet (PDF/Excel)  
+**Admin:** Get Pending Validations → Compare Internal vs Client Data → Validate/Reject → View Statistics
+
+---
+
+**🏖️ Leave Management Workflow:**
+
+**STEP 1: Admin Setup (One-time)**
+→ POST /api/leaves/plans - Create leave plan with allocations
+   - Define leave types (CL, PL, SL, etc.)
+   - Set days_allocated per type
+   - Enable/disable proration for mid-year joiners
+
+**STEP 2: Employee Leave Application**
+1. **Check Balance**: GET /api/leaves/balance
+   - View available leave balance by type
+   - See allocated, used, available counts
+2. **Apply Leave**: POST /api/leaves/apply
+   - Select: leave_type_id, start_date, end_date
+   - System auto-calculates total_days
+   - Add reason (required)
+   - Status: pending (awaiting approval)
+3. **View My Leaves**: GET /api/leaves/my-leaves
+   - Filter by: leave_year
+   - Shows: status, dates, approver, balance impact
+
+**STEP 3: Manager/HR Approval**
+1. **View Pending Requests**: GET /api/leaves/pending
+   - Shows employee details + leave balance
+2. **Approve**: POST /api/leaves/approve/{id}
+   - Deducts from employee balance automatically
+   - Sends notification to employee
+3. **Reject**: POST /api/leaves/reject/{id}
+   - Add rejection reason
+   - Balance remains unchanged
+
+**WFH/Remote Work:**
+- **Request**: POST /api/leaves/wfh-request (date, work_mode, reason)
+- **View Requests**: GET /api/leaves/wfh-requests
+- **Pending Approvals**: GET /api/leaves/wfh-requests/pending (HR only)
+
+**Key Features:** ✅ Auto balance calculation ✅ Proration support ✅ Multi-level approval ✅ Balance tracking ✅ WFH/Remote requests
+
+---
+
+**💰 Payroll Workflow:**
+
+**STEP 1: Employee Salary Structure Setup (Admin)**
+→ POST /api/payroll/salary/structure/{empId}
+   - Define: basic, hra, conveyance, special_allowance
+   - Set deductions: pf, esi, professional_tax
+   - Saved to salary_structures table
+
+**STEP 2: Generate Monthly Payroll (Admin)**
+→ POST /api/payroll/generate
+   - Required: month (1-12), year (2025)
+   - System auto-calculates:
+     • Gross salary (basic + hra + allowances)
+     • Total deductions (pf + esi + tax)
+     • Net salary (gross - deductions)
+   - Creates payroll_run + payroll_slips for all employees
+
+**STEP 3: View Payroll Data**
+1. **Admin View**: GET /api/payroll/runs
+   - All payroll runs with employee counts
+2. **Employee View**: GET /api/payroll/slips/employee/{employee_id}
+   - Own salary slips only
+   - Shows: month, gross, deductions, net_salary
+
+**STEP 4: Bulk Upload (Optional)**
+→ POST /api/upload/payroll (multipart/form-data)
+   - Upload Excel with employee payroll data
+   - Fields: EmployeeNumber, basic, hra, pf, esi, etc.
+   - Params: month, year
+   - Creates slips for multiple employees at once
+
+**Key Features:** ✅ Salary structure templates ✅ Auto-calculation (gross/net) ✅ Bulk Excel upload ✅ Employee self-service view ✅ Monthly payroll runs`
     },
     servers: [
         { 
@@ -56,7 +126,11 @@ const swaggerSpec = {
                 properties: {
                     id: { type: "integer" },
                     username: { type: "string" },
-                    role: { type: "string", enum: ["admin", "hr", "manager", "employee"] }
+                    role: { 
+                        type: "string", 
+                        enum: ["admin", "hr", "manager", "employee"],
+                        description: "User role - admin (full access), hr (HR operations), manager (team management), employee (self-service)"
+                    }
                 }
             },
             Employee: {
@@ -75,7 +149,12 @@ const swaggerSpec = {
                 type: "object",
                 required: ["work_mode"],
                 properties: {
-                    work_mode: { type: "string", enum: ["Office", "WFH", "Remote", "Hybrid"], example: "WFH" },
+                    work_mode: { 
+                        type: "string", 
+                        enum: ["Office", "WFH", "Remote", "Hybrid"],
+                        description: "Work mode - Office (on-site), WFH (Work From Home), Remote (any remote location), Hybrid (mixed mode)",
+                        example: "WFH" 
+                    },
                     location: { type: "string", example: "Home - Mumbai" },
                     notes: { type: "string", example: "Working from home today" }
                 }
@@ -85,7 +164,12 @@ const swaggerSpec = {
                 required: ["date", "work_mode", "reason"],
                 properties: {
                     date: { type: "string", format: "date", example: "2025-12-25" },
-                    work_mode: { type: "string", enum: ["WFH", "Remote"], example: "WFH" },
+                    work_mode: { 
+                        type: "string", 
+                        enum: ["WFH", "Remote"],
+                        description: "Work mode - WFH (Work From Home) or Remote (any remote location)",
+                        example: "WFH" 
+                    },
                     reason: { type: "string", example: "Personal commitment" }
                 }
             },
@@ -98,7 +182,12 @@ const swaggerSpec = {
                     start_date: { type: "string", format: "date" },
                     end_date: { type: "string", format: "date" },
                     reason: { type: "string" },
-                    status: { type: "string", enum: ["pending", "approved", "rejected"], default: "pending" }
+                    status: { 
+                        type: "string", 
+                        enum: ["pending", "approved", "rejected", "cancelled"],
+                        description: "Leave status - pending (awaiting approval), approved (approved by manager), rejected (denied), cancelled (withdrawn by employee)",
+                        default: "pending" 
+                    }
                 }
             },
             ErrorResponse: {
@@ -820,7 +909,12 @@ const swaggerSpec = {
                             schema: {
                                 type: "object",
                                 properties: {
-                                    work_mode: { type: "string", enum: ["Office", "WFH", "Remote", "Hybrid"], example: "Office" },
+                                    work_mode: { 
+                                        type: "string", 
+                                        enum: ["Office", "WFH", "Remote", "Hybrid"], 
+                                        description: "Work mode - Office, WFH (Work From Home), Remote, or Hybrid",
+                                        example: "Office" 
+                                    },
                                     location: { type: "string", example: "Mumbai Office" },
                                     notes: { type: "string", example: "Starting work" }
                                 }
@@ -1904,6 +1998,21 @@ const swaggerSpec = {
             post: {
                 summary: "Generate Payroll (Admin)",
                 tags: ["💰 Payroll"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["month", "year"],
+                                properties: {
+                                    month: { type: "integer", example: 12, description: "Month (1-12)" },
+                                    year: { type: "integer", example: 2025, description: "Year" }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
                     200: { description: "Payroll generated" }
                 }
@@ -1956,50 +2065,403 @@ const swaggerSpec = {
                     required: true,
                     schema: { type: "integer" }
                 }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["basic", "hra"],
+                                properties: {
+                                    basic: { type: "number", example: 25000, description: "Basic salary" },
+                                    hra: { type: "number", example: 10000, description: "House Rent Allowance" },
+                                    conveyance: { type: "number", example: 1600, description: "Conveyance allowance" },
+                                    special_allowance: { type: "number", example: 15000, description: "Special allowance" },
+                                    pf: { type: "number", example: 1800, description: "Provident Fund deduction" },
+                                    esi: { type: "number", example: 750, description: "ESI deduction" },
+                                    professional_tax: { type: "number", example: 200, description: "Professional tax" },
+                                    other_deductions: { type: "number", example: 0, description: "Other deductions" }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
                     200: { description: "Structure created" }
                 }
             }
         },
         
-        // ============ TIMESHEETS ============
-        "/api/timesheets": {
+        // ============ ENHANCED TIMESHEETS ============
+        "/api/timesheets/assignment-status": {
             get: {
-                summary: "Get All Timesheets",
+                summary: "✨ Check Project Assignment Status",
+                description: "Check if employee is assigned to projects (determines timesheet type: regular or project-based)",
                 tags: ["📝 Timesheets"],
                 responses: {
-                    200: { description: "List of timesheets" }
+                    200: {
+                        description: "Assignment status",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    has_project: true,
+                                    timesheet_type: "project_based",
+                                    assignments: [
+                                        {
+                                            project_id: 1,
+                                            project_name: "Client Portal",
+                                            client_name: "ABC Corp",
+                                            shift_name: "General Shift",
+                                            daily_hours: 8
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
                 }
-            },
+            }
+        },
+        "/api/timesheets/regular/submit": {
             post: {
-                summary: "Create Timesheet",
+                summary: "✨ Submit Regular Timesheet (Non-Project Employees)",
+                description: "Submit hourly timesheet based on shift timings for employees not assigned to projects",
                 tags: ["📝 Timesheets"],
-                responses: {
-                    200: { description: "Timesheet created" }
-                }
-            }
-        },
-        "/api/timesheets/me": {
-            get: {
-                summary: "Get My Timesheets",
-                tags: ["📝 Timesheets"],
-                responses: {
-                    200: { description: "My timesheets" }
-                }
-            }
-        },
-        "/api/timesheets/{id}/approve": {
-            put: {
-                summary: "Approve Timesheet (Manager)",
-                tags: ["📝 Timesheets"],
-                parameters: [{
-                    name: "id",
-                    in: "path",
+                requestBody: {
                     required: true,
-                    schema: { type: "integer" }
-                }],
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    date: { type: "string", format: "date" },
+                                    hours_breakdown: {
+                                        type: "array",
+                                        items: {
+                                            type: "object",
+                                            properties: {
+                                                hour: { type: "string", example: "09:00-10:00" },
+                                                task: { type: "string", example: "Development" },
+                                                hours: { type: "number", example: 1 }
+                                            }
+                                        }
+                                    },
+                                    total_hours: { type: "number" },
+                                    notes: { type: "string" }
+                                },
+                                required: ["date", "hours_breakdown", "total_hours"]
+                            },
+                            example: {
+                                date: "2025-12-23",
+                                hours_breakdown: [
+                                    { hour: "09:00-10:00", task: "Development", hours: 1 },
+                                    { hour: "10:00-12:00", task: "Testing", hours: 2 },
+                                    { hour: "13:00-17:00", task: "Code Review", hours: 4 }
+                                ],
+                                total_hours: 7,
+                                notes: "Regular work day"
+                            }
+                        }
+                    }
+                },
                 responses: {
-                    200: { description: "Approved" }
+                    200: {
+                        description: "Timesheet submitted",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    success: true,
+                                    message: "Regular timesheet submitted successfully",
+                                    timesheet_id: 15
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/timesheets/regular/my-timesheets": {
+            get: {
+                summary: "✨ Get My Regular Timesheets",
+                description: "Get regular timesheets with filters",
+                tags: ["📝 Timesheets"],
+                parameters: [
+                    { name: "start_date", in: "query", schema: { type: "string", format: "date" } },
+                    { name: "end_date", in: "query", schema: { type: "string", format: "date" } },
+                    { name: "month", in: "query", schema: { type: "integer" } },
+                    { name: "year", in: "query", schema: { type: "integer" } }
+                ],
+                responses: {
+                    200: { description: "Regular timesheets list" }
+                }
+            }
+        },
+        "/api/timesheets/project/submit": {
+            post: {
+                summary: "✨ Submit Project Timesheet",
+                description: "Submit hourly timesheet for project work based on project shift timings",
+                tags: ["📝 Timesheets"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    date: { type: "string", format: "date" },
+                                    project_id: { type: "integer" },
+                                    hours_breakdown: { type: "array" },
+                                    total_hours: { type: "number" },
+                                    work_description: { type: "string" },
+                                    notes: { type: "string" }
+                                },
+                                required: ["date", "project_id", "hours_breakdown", "total_hours", "work_description"]
+                            },
+                            example: {
+                                date: "2025-12-23",
+                                project_id: 1,
+                                hours_breakdown: [
+                                    { hour: "09:00-12:00", task: "Feature Development", hours: 3 },
+                                    { hour: "13:00-17:00", task: "Bug Fixes", hours: 4 }
+                                ],
+                                total_hours: 7,
+                                work_description: "Implemented user authentication module",
+                                notes: "Completed ahead of schedule"
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: "Project timesheet submitted",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    success: true,
+                                    message: "Project timesheet submitted successfully",
+                                    timesheet_id: 20
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/timesheets/project/my-timesheets": {
+            get: {
+                summary: "✨ Get My Project Timesheets",
+                description: "Get project timesheets with filters",
+                tags: ["📝 Timesheets"],
+                parameters: [
+                    { name: "project_id", in: "query", schema: { type: "integer" } },
+                    { name: "start_date", in: "query", schema: { type: "string", format: "date" } },
+                    { name: "end_date", in: "query", schema: { type: "string", format: "date" } },
+                    { name: "month", in: "query", schema: { type: "integer" } },
+                    { name: "year", in: "query", schema: { type: "integer" } }
+                ],
+                responses: {
+                    200: { description: "Project timesheets list" }
+                }
+            }
+        },
+        "/api/timesheets/client-timesheet/upload": {
+            post: {
+                summary: "✨ Upload Client Timesheet (End of Month)",
+                description: "Upload client-provided timesheet for validation against internal timesheets",
+                tags: ["📝 Timesheets"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "multipart/form-data": {
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    file: { type: "string", format: "binary" },
+                                    month: { type: "integer" },
+                                    year: { type: "integer" },
+                                    project_id: { type: "integer" }
+                                },
+                                required: ["file", "month", "year", "project_id"]
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: "Client timesheet uploaded",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    success: true,
+                                    message: "Client timesheet uploaded successfully",
+                                    file_path: "uploads/client_timesheets/...",
+                                    timesheets_updated: 22
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/timesheets/client-timesheet/status": {
+            get: {
+                summary: "✨ Get Client Timesheet Status",
+                description: "Check client timesheet upload and validation status",
+                tags: ["📝 Timesheets"],
+                parameters: [
+                    { name: "month", in: "query", required: true, schema: { type: "integer" } },
+                    { name: "year", in: "query", required: true, schema: { type: "integer" } }
+                ],
+                responses: {
+                    200: {
+                        description: "Client timesheet status",
+                        content: {
+                            "application/json": {
+                                example: [
+                                    {
+                                        project_id: 1,
+                                        project_name: "Client Portal",
+                                        client_name: "ABC Corp",
+                                        total_days: 22,
+                                        total_hours: 176,
+                                        client_file: "uploads/...",
+                                        upload_date: "2025-12-31",
+                                        validation_status: "validated"
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/timesheets/admin/pending-validation": {
+            get: {
+                summary: "✨ Get Timesheets Pending Validation (Admin)",
+                description: "Get all timesheets with client timesheets uploaded but pending validation",
+                tags: ["📝 Timesheets"],
+                parameters: [
+                    { name: "month", in: "query", schema: { type: "integer" } },
+                    { name: "year", in: "query", schema: { type: "integer" } },
+                    { name: "project_id", in: "query", schema: { type: "integer" } }
+                ],
+                responses: {
+                    200: {
+                        description: "Pending validations list",
+                        content: {
+                            "application/json": {
+                                example: [
+                                    {
+                                        employee_id: 5,
+                                        EmployeeNumber: "EMP005",
+                                        FirstName: "John",
+                                        project_name: "Client Portal",
+                                        total_days: 22,
+                                        internal_total_hours: 176,
+                                        client_file: "uploads/...",
+                                        validation_status: "pending_validation"
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/timesheets/admin/validation-details/{employeeId}/{projectId}/{month}/{year}": {
+            get: {
+                summary: "✨ Get Validation Details (Admin)",
+                description: "Get detailed comparison between internal and client timesheets for validation",
+                tags: ["📝 Timesheets"],
+                parameters: [
+                    { name: "employeeId", in: "path", required: true, schema: { type: "integer" } },
+                    { name: "projectId", in: "path", required: true, schema: { type: "integer" } },
+                    { name: "month", in: "path", required: true, schema: { type: "integer" } },
+                    { name: "year", in: "path", required: true, schema: { type: "integer" } }
+                ],
+                responses: {
+                    200: {
+                        description: "Validation details with comparison"
+                    }
+                }
+            }
+        },
+        "/api/timesheets/admin/validate": {
+            post: {
+                summary: "✨ Validate Timesheets (Admin)",
+                description: "Validate or reject timesheets after comparing internal vs client data",
+                tags: ["📝 Timesheets"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    employee_id: { type: "integer" },
+                                    project_id: { type: "integer" },
+                                    month: { type: "integer" },
+                                    year: { type: "integer" },
+                                    validation_status: { 
+                                        type: "string", 
+                                        enum: ["validated", "rejected", "mismatch"],
+                                        description: "Validation status - validated (approved), rejected (discrepancies found), mismatch (hours don't match)"
+                                    },
+                                    remarks: { type: "string" },
+                                    client_hours: { type: "number" }
+                                },
+                                required: ["employee_id", "project_id", "month", "year", "validation_status"]
+                            },
+                            example: {
+                                employee_id: 5,
+                                project_id: 1,
+                                month: 12,
+                                year: 2025,
+                                validation_status: "validated",
+                                remarks: "Hours match perfectly",
+                                client_hours: 176
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: "Validation completed",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    success: true,
+                                    message: "Timesheets validated successfully"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/timesheets/admin/validation-stats": {
+            get: {
+                summary: "✨ Get Validation Statistics (Admin)",
+                description: "Get overview statistics of timesheet validations",
+                tags: ["📝 Timesheets"],
+                parameters: [
+                    { name: "month", in: "query", schema: { type: "integer" } },
+                    { name: "year", in: "query", schema: { type: "integer" } }
+                ],
+                responses: {
+                    200: {
+                        description: "Validation statistics",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    total_submissions: 45,
+                                    pending: 12,
+                                    validated: 30,
+                                    rejected: 3
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
@@ -2101,6 +2563,7 @@ const swaggerSpec = {
                 summary: "Create Department (Admin)",
                 tags: ["🏢 Master Data"],
                 requestBody: {
+                    required: true,
                     content: {
                         "application/json": {
                             schema: {
@@ -2130,6 +2593,7 @@ const swaggerSpec = {
                 summary: "Create Designation (Admin)",
                 tags: ["🏢 Master Data"],
                 requestBody: {
+                    required: true,
                     content: {
                         "application/json": {
                             schema: {
@@ -2158,6 +2622,20 @@ const swaggerSpec = {
             post: {
                 summary: "Create Business Unit (Admin)",
                 tags: ["🏢 Master Data"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["name"],
+                                properties: {
+                                    name: { type: "string", example: "IT Services" }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
                     200: { description: "Business unit created" }
                 }
@@ -2174,6 +2652,20 @@ const swaggerSpec = {
             post: {
                 summary: "Create Legal Entity (Admin)",
                 tags: ["🏢 Master Data"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["name"],
+                                properties: {
+                                    name: { type: "string", example: "ABC Technologies Pvt Ltd" }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
                     200: { description: "Legal entity created" }
                 }
@@ -2219,6 +2711,21 @@ const swaggerSpec = {
             post: {
                 summary: "Create Sub-Department (Admin)",
                 tags: ["🏢 Master Data"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["name"],
+                                properties: {
+                                    name: { type: "string", example: "Backend Development" },
+                                    department_id: { type: "integer", example: 1, description: "Parent department ID" }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
                     200: { description: "Sub-department created" }
                 }
@@ -2235,6 +2742,20 @@ const swaggerSpec = {
             post: {
                 summary: "Create Band (Admin)",
                 tags: ["🏢 Master Data"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["name"],
+                                properties: {
+                                    name: { type: "string", example: "Band A" }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
                     200: { description: "Band created" }
                 }
@@ -2251,6 +2772,20 @@ const swaggerSpec = {
             post: {
                 summary: "Create Pay Grade (Admin)",
                 tags: ["🏢 Master Data"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["name"],
+                                properties: {
+                                    name: { type: "string", example: "Grade 1" }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
                     200: { description: "Pay grade created" }
                 }
@@ -2276,15 +2811,152 @@ const swaggerSpec = {
             get: {
                 summary: "Get All Shift Policies",
                 tags: ["🏢 Master Data"],
+                description: "Retrieve all shift policies with timing details for regular timesheet creation",
                 responses: {
-                    200: { description: "List of shift policies" }
+                    200: {
+                        description: "List of shift policies",
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "array",
+                                    items: {
+                                        type: "object",
+                                        properties: {
+                                            id: { type: "integer", example: 1 },
+                                            name: { type: "string", example: "Day Shift" },
+                                            shift_type: { type: "string", enum: ["general", "night", "rotating", "flexible"], example: "general" },
+                                            start_time: { type: "string", format: "time", example: "09:00:00" },
+                                            end_time: { type: "string", format: "time", example: "18:00:00" },
+                                            break_duration_minutes: { type: "integer", example: 60 },
+                                            timezone: { type: "string", example: "UTC" },
+                                            description: { type: "string", example: "Standard 9-6 office hours" },
+                                            is_active: { type: "integer", example: 1 },
+                                            created_at: { type: "string", format: "date-time" },
+                                            updated_at: { type: "string", format: "date-time" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             },
             post: {
                 summary: "Create Shift Policy (Admin)",
                 tags: ["🏢 Master Data"],
+                description: "Create a new shift policy with timing details. Used for regular timesheet hourly breakdowns.",
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["name", "start_time", "end_time"],
+                                properties: {
+                                    name: { type: "string", example: "Day Shift" },
+                                    shift_type: { type: "string", enum: ["general", "night", "rotating", "flexible"], example: "general" },
+                                    start_time: { type: "string", format: "time", example: "09:00:00" },
+                                    end_time: { type: "string", format: "time", example: "18:00:00" },
+                                    break_duration_minutes: { type: "integer", example: 60, description: "Break duration in minutes (default: 60)" },
+                                    timezone: { type: "string", example: "Asia/Kolkata", description: "Timezone (default: UTC)" },
+                                    description: { type: "string", example: "Standard 9-6 office hours with 1 hour break" },
+                                    is_active: { type: "integer", example: 1, description: "1 for active, 0 for inactive" }
+                                }
+                            },
+                            examples: {
+                                dayShift: {
+                                    summary: "Day Shift Example",
+                                    value: {
+                                        name: "Day Shift",
+                                        shift_type: "general",
+                                        start_time: "09:00:00",
+                                        end_time: "18:00:00",
+                                        break_duration_minutes: 60,
+                                        timezone: "Asia/Kolkata",
+                                        description: "Standard 9-6 office hours",
+                                        is_active: 1
+                                    }
+                                },
+                                nightShift: {
+                                    summary: "Night Shift Example",
+                                    value: {
+                                        name: "Night Shift",
+                                        shift_type: "night",
+                                        start_time: "21:00:00",
+                                        end_time: "06:00:00",
+                                        break_duration_minutes: 60,
+                                        timezone: "UTC",
+                                        description: "Night shift for 24/7 operations",
+                                        is_active: 1
+                                    }
+                                },
+                                flexibleShift: {
+                                    summary: "Flexible Shift Example",
+                                    value: {
+                                        name: "Flexible Hours",
+                                        shift_type: "flexible",
+                                        start_time: "10:00:00",
+                                        end_time: "19:00:00",
+                                        break_duration_minutes: 60,
+                                        timezone: "Asia/Kolkata",
+                                        description: "Flexible working hours",
+                                        is_active: 1
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
-                    200: { description: "Shift policy created" }
+                    200: { description: "Shift policy created", content: { "application/json": { schema: { type: "object", properties: { message: { type: "string" }, id: { type: "integer" } } } } } },
+                    400: { description: "Invalid input - missing required fields" },
+                    500: { description: "Server error" }
+                }
+            }
+        },
+        "/api/shift-policies/{id}": {
+            put: {
+                summary: "Update Shift Policy (Admin)",
+                tags: ["🏢 Master Data"],
+                description: "Update an existing shift policy. All fields are optional.",
+                parameters: [
+                    {
+                        name: "id",
+                        in: "path",
+                        required: true,
+                        schema: { type: "integer" },
+                        description: "Shift Policy ID"
+                    }
+                ],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    name: { type: "string" },
+                                    shift_type: { type: "string", enum: ["general", "night", "rotating", "flexible"] },
+                                    start_time: { type: "string", format: "time" },
+                                    end_time: { type: "string", format: "time" },
+                                    break_duration_minutes: { type: "integer" },
+                                    timezone: { type: "string" },
+                                    description: { type: "string" },
+                                    is_active: { type: "integer" }
+                                }
+                            },
+                            example: {
+                                start_time: "09:30:00",
+                                end_time: "18:30:00",
+                                description: "Updated timing"
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: { description: "Shift policy updated" },
+                    400: { description: "No fields to update" },
+                    500: { description: "Server error" }
                 }
             }
         },
@@ -2299,6 +2971,20 @@ const swaggerSpec = {
             post: {
                 summary: "Create Weekly Off Policy (Admin)",
                 tags: ["🏢 Master Data"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["name"],
+                                properties: {
+                                    name: { type: "string", example: "5 Day Week (Sat-Sun Off)" }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
                     200: { description: "Weekly off policy created" }
                 }
@@ -2315,6 +3001,20 @@ const swaggerSpec = {
             post: {
                 summary: "Create Attendance Policy (Admin)",
                 tags: ["🏢 Master Data"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["name"],
+                                properties: {
+                                    name: { type: "string", example: "Standard Attendance Policy" }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
                     200: { description: "Attendance policy created" }
                 }
@@ -2331,6 +3031,20 @@ const swaggerSpec = {
             post: {
                 summary: "Create Attendance Capture Scheme (Admin)",
                 tags: ["🏢 Master Data"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["name"],
+                                properties: {
+                                    name: { type: "string", example: "Biometric + Web Punch" }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
                     200: { description: "Attendance capture scheme created" }
                 }
@@ -2347,6 +3061,20 @@ const swaggerSpec = {
             post: {
                 summary: "Create Holiday List (Admin)",
                 tags: ["🏢 Master Data"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["name"],
+                                properties: {
+                                    name: { type: "string", example: "India Holidays 2025" }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
                     200: { description: "Holiday list created" }
                 }
@@ -2363,6 +3091,20 @@ const swaggerSpec = {
             post: {
                 summary: "Create Expense Policy (Admin)",
                 tags: ["🏢 Master Data"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["name"],
+                                properties: {
+                                    name: { type: "string", example: "Travel & Expense Policy 2025" }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
                     200: { description: "Expense policy created" }
                 }
@@ -2541,6 +3283,23 @@ const swaggerSpec = {
             post: {
                 summary: "Create Announcement (Admin)",
                 tags: ["📢 Announcements"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["title", "body"],
+                                properties: {
+                                    title: { type: "string", example: "Company Holiday Notice" },
+                                    body: { type: "string", example: "Office will be closed on Dec 25th for Christmas" },
+                                    starts_at: { type: "string", format: "date-time", example: "2025-12-23T00:00:00Z" },
+                                    ends_at: { type: "string", format: "date-time", example: "2025-12-26T23:59:59Z" }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
                     200: { description: "Announcement created" }
                 }
@@ -2559,8 +3318,29 @@ const swaggerSpec = {
             post: {
                 summary: "Create Support Ticket",
                 tags: ["🎫 Support"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["subject", "message"],
+                                properties: {
+                                    subject: { type: "string", example: "Unable to access payroll" },
+                                    message: { type: "string", example: "I am getting an error when trying to view my payslip for December 2025" },
+                                    priority: { 
+                                        type: "string", 
+                                        enum: ["Low", "Medium", "High", "Critical"],
+                                        default: "Medium",
+                                        example: "High" 
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
-                    200: { description: "Ticket created" }
+                    200: { description: "Ticket created", content: { "application/json": { example: { success: true, ticket_id: 15 } } } }
                 }
             }
         },
@@ -2588,8 +3368,23 @@ const swaggerSpec = {
             post: {
                 summary: "Send Birthday Wish",
                 tags: ["🎂 Birthdays"],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                required: ["employee_id", "message"],
+                                properties: {
+                                    employee_id: { type: "integer", example: 5 },
+                                    message: { type: "string", example: "Happy Birthday! Wishing you a wonderful year ahead!" }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
-                    200: { description: "Wish sent" }
+                    200: { description: "Wish sent", content: { "application/json": { example: { success: true, message: "Birthday wish sent successfully" } } } }
                 }
             }
         },
@@ -2612,10 +3407,11 @@ const swaggerSpec = {
                     name: "id",
                     in: "path",
                     required: true,
-                    schema: { type: "integer" }
+                    schema: { type: "integer" },
+                    description: "Notification ID"
                 }],
                 responses: {
-                    200: { description: "Marked as read" }
+                    200: { description: "Notification marked as read" }
                 }
             }
         },
@@ -3617,531 +4413,8 @@ const swaggerSpec = {
                     }
                 }
             }
-        },
-        
-        // ============ PROJECT WORK UPDATES (EMPLOYEE) ============
-        "/api/work-updates/my-projects": {
-            get: {
-                summary: "Get My Active Project Assignments",
-                description: "Get list of active project assignments for logged-in employee with shift details",
-                tags: ["🚀 Project Work Updates"],
-                responses: {
-                    200: {
-                        description: "List of active projects with shift information",
-                        content: {
-                            "application/json": {
-                                example: {
-                                    projects: [
-                                        {
-                                            assignment_id: 1,
-                                            employee_id: 5,
-                                            project_id: 1,
-                                            project_code: "PRJ001",
-                                            project_name: "E-Commerce Platform Development",
-                                            client_name: "TechCorp Inc",
-                                            role_in_project: "Full Stack Developer",
-                                            allocation_percentage: 100,
-                                            assignment_start_date: "2025-01-01",
-                                            assignment_end_date: null,
-                                            shift_id: 1,
-                                            shift_type: "general",
-                                            shift_name: "Day Shift",
-                                            start_time: "09:00:00",
-                                            end_time: "18:00:00",
-                                            timezone: "Asia/Kolkata",
-                                            assignment_status: "active"
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    },
-                    404: { description: "No employee found or no active assignments" }
-                }
-            }
-        },
-        "/api/work-updates/submit": {
-            post: {
-                summary: "Submit Daily Work Update",
-                description: "Submit daily work update with client timesheet upload. Supports draft mode and final submission.",
-                tags: ["🚀 Project Work Updates"],
-                requestBody: {
-                    required: true,
-                    content: {
-                        "multipart/form-data": {
-                            schema: {
-                                type: "object",
-                                required: ["projectId", "shiftId", "updateDate", "shiftStartTime", "shiftEndTime", "hoursWorked", "workDescription", "clientTimesheet"],
-                                properties: {
-                                    projectId: { type: "integer", example: 1 },
-                                    shiftId: { type: "integer", example: 1 },
-                                    updateDate: { type: "string", format: "date", example: "2025-12-23" },
-                                    shiftStartTime: { type: "string", format: "date-time", example: "2025-12-23T09:00:00" },
-                                    shiftEndTime: { type: "string", format: "date-time", example: "2025-12-23T18:00:00" },
-                                    hoursWorked: { type: "number", example: 9, description: "Total hours worked" },
-                                    workDescription: { type: "string", example: "Completed API integration and bug fixes" },
-                                    tasksCompleted: { type: "string", example: "1. Fixed login bug\n2. Updated user API" },
-                                    challengesFaced: { type: "string", example: "Database connection timeout issues" },
-                                    submitNow: { type: "boolean", example: true, description: "true = submit, false = save draft" },
-                                    clientTimesheet: { type: "string", format: "binary", description: "Client timesheet file (PDF, Excel, CSV, Image - Max 10MB)" }
-                                }
-                            }
-                        }
-                    }
-                },
-                responses: {
-                    200: {
-                        description: "Work update submitted successfully",
-                        content: {
-                            "application/json": {
-                                example: {
-                                    success: true,
-                                    message: "Work update submitted successfully",
-                                    workUpdateId: 15,
-                                    timesheetId: 8,
-                                    status: "submitted"
-                                }
-                            }
-                        }
-                    },
-                    400: { description: "Validation error or missing required fields" }
-                }
-            }
-        },
-        "/api/work-updates/my-updates": {
-            get: {
-                summary: "Get My Work Updates",
-                description: "Get work updates for logged-in employee with optional date range filter",
-                tags: ["🚀 Project Work Updates"],
-                parameters: [
-                    { name: "startDate", in: "query", schema: { type: "string", format: "date" }, example: "2025-11-01" },
-                    { name: "endDate", in: "query", schema: { type: "string", format: "date" }, example: "2025-12-31" }
-                ],
-                responses: {
-                    200: {
-                        description: "List of work updates with verification status",
-                        content: {
-                            "application/json": {
-                                example: {
-                                    updates: [
-                                        {
-                                            id: 15,
-                                            employee_id: 5,
-                                            project_id: 1,
-                                            project_name: "E-Commerce Platform Development",
-                                            client_name: "TechCorp Inc",
-                                            update_date: "2025-12-23",
-                                            shift_start_time: "2025-12-23T09:00:00",
-                                            shift_end_time: "2025-12-23T18:00:00",
-                                            hours_worked: 9,
-                                            work_description: "Completed API integration",
-                                            tasks_completed: "Fixed login bug",
-                                            challenges_faced: "None",
-                                            status: "approved",
-                                            submission_timestamp: "2025-12-23T18:30:00",
-                                            shift_name: "Day Shift",
-                                            shift_type: "general",
-                                            timesheet_id: 8,
-                                            file_name: "timesheet_23122025.pdf",
-                                            is_verified: true,
-                                            verification_status: "approved",
-                                            verification_notes: "All details verified"
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/work-updates/{id}": {
-            delete: {
-                summary: "Delete Work Update (Draft Only)",
-                description: "Delete a work update if it's in draft status",
-                tags: ["🚀 Project Work Updates"],
-                parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
-                responses: {
-                    200: {
-                        description: "Draft deleted successfully",
-                        content: {
-                            "application/json": {
-                                example: { success: true, message: "Draft deleted successfully" }
-                            }
-                        }
-                    },
-                    403: { description: "Cannot delete submitted work updates" },
-                    404: { description: "Work update not found" }
-                }
-            }
-        },
-        "/api/work-updates/compliance-status": {
-            get: {
-                summary: "Get My Compliance Status",
-                description: "Get compliance status for logged-in employee (last 30 days)",
-                tags: ["🚀 Project Work Updates"],
-                responses: {
-                    200: {
-                        description: "Compliance status with traffic light indicators",
-                        content: {
-                            "application/json": {
-                                example: {
-                                    complianceRecords: [
-                                        {
-                                            compliance_date: "2025-12-23",
-                                            project_id: 1,
-                                            project_name: "E-Commerce Platform",
-                                            client_name: "TechCorp Inc",
-                                            has_work_update: true,
-                                            has_client_timesheet: true,
-                                            compliance_status: "compliant",
-                                            reminder_count: 0,
-                                            shift_name: "Day Shift",
-                                            shift_type: "general"
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/work-updates/download-timesheet/{timesheetId}": {
-            get: {
-                summary: "Download Client Timesheet",
-                description: "Download uploaded client timesheet file",
-                tags: ["🚀 Project Work Updates"],
-                parameters: [{ name: "timesheetId", in: "path", required: true, schema: { type: "integer" } }],
-                responses: {
-                    200: {
-                        description: "Timesheet file",
-                        content: {
-                            "application/pdf": {},
-                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {},
-                            "image/png": {},
-                            "image/jpeg": {}
-                        }
-                    },
-                    404: { description: "Timesheet not found" }
-                }
-            }
-        },
-        
-        // ============ ADMIN TIMESHEET VERIFICATION ============
-        "/api/admin/timesheet/dashboard": {
-            get: {
-                summary: "Admin Compliance Dashboard",
-                description: "Get compliance dashboard with traffic light status (green/yellow/red) for all projects (Admin/HR only)",
-                tags: ["🔐 Admin Timesheet Verification"],
-                parameters: [
-                    { name: "startDate", in: "query", schema: { type: "string", format: "date" }, example: "2025-12-01" },
-                    { name: "endDate", in: "query", schema: { type: "string", format: "date" }, example: "2025-12-31" }
-                ],
-                responses: {
-                    200: {
-                        description: "Dashboard with project compliance statistics",
-                        content: {
-                            "application/json": {
-                                example: {
-                                    dashboard: [
-                                        {
-                                            project_id: 1,
-                                            project_name: "E-Commerce Platform",
-                                            client_name: "TechCorp Inc",
-                                            compliance_date: "2025-12-23",
-                                            total_employees: 10,
-                                            compliant_count: 8,
-                                            update_only_count: 1,
-                                            missing_count: 1,
-                                            traffic_light_status: "yellow"
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    },
-                    403: { description: "Admin/HR access required" }
-                }
-            }
-        },
-        "/api/admin/timesheet/non-compliant": {
-            get: {
-                summary: "Get Non-Compliant Employees",
-                description: "Get list of employees who haven't submitted updates or timesheets (Admin/HR only)",
-                tags: ["🔐 Admin Timesheet Verification"],
-                parameters: [
-                    { name: "date", in: "query", schema: { type: "string", format: "date" }, example: "2025-12-23" }
-                ],
-                responses: {
-                    200: {
-                        description: "List of non-compliant employees",
-                        content: {
-                            "application/json": {
-                                example: {
-                                    nonCompliant: [
-                                        {
-                                            employee_id: 5,
-                                            employee_code: "EMP005",
-                                            first_name: "John",
-                                            last_name: "Doe",
-                                            project_id: 1,
-                                            project_name: "E-Commerce Platform",
-                                            client_name: "TechCorp Inc",
-                                            compliance_date: "2025-12-23",
-                                            compliance_status: "missing",
-                                            has_work_update: false,
-                                            has_client_timesheet: false,
-                                            reminder_count: 2,
-                                            shift_name: "Day Shift",
-                                            shift_type: "general"
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/admin/timesheet/verification-queue": {
-            get: {
-                summary: "Get Verification Queue",
-                description: "Get submitted work updates awaiting verification (Admin/HR only)",
-                tags: ["🔐 Admin Timesheet Verification"],
-                responses: {
-                    200: {
-                        description: "Queue of submissions pending verification",
-                        content: {
-                            "application/json": {
-                                example: {
-                                    queue: [
-                                        {
-                                            id: 15,
-                                            employee_id: 5,
-                                            employee_name: "John Doe",
-                                            employee_code: "EMP005",
-                                            project_name: "E-Commerce Platform",
-                                            client_name: "TechCorp Inc",
-                                            update_date: "2025-12-23",
-                                            hours_worked: 9,
-                                            work_description: "API integration completed",
-                                            status: "submitted",
-                                            submission_timestamp: "2025-12-23T18:30:00",
-                                            timesheet_id: 8,
-                                            file_name: "timesheet.pdf",
-                                            is_verified: false
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/admin/timesheet/comparison/{workUpdateId}": {
-            get: {
-                summary: "Get Comparison Data",
-                description: "Get side-by-side comparison of work update and client timesheet for verification (Admin/HR only)",
-                tags: ["🔐 Admin Timesheet Verification"],
-                parameters: [{ name: "workUpdateId", in: "path", required: true, schema: { type: "integer" } }],
-                responses: {
-                    200: {
-                        description: "Detailed comparison data",
-                        content: {
-                            "application/json": {
-                                example: {
-                                    workUpdate: {
-                                        id: 15,
-                                        employee_name: "John Doe",
-                                        project_name: "E-Commerce Platform",
-                                        update_date: "2025-12-23",
-                                        shift_start_time: "2025-12-23T09:00:00",
-                                        shift_end_time: "2025-12-23T18:00:00",
-                                        hours_worked: 9,
-                                        work_description: "API integration",
-                                        tasks_completed: "Login API fixed",
-                                        challenges_faced: "None",
-                                        status: "submitted"
-                                    },
-                                    clientTimesheet: {
-                                        id: 8,
-                                        file_name: "timesheet.pdf",
-                                        file_path: "/uploads/client_timesheets/timesheet.pdf",
-                                        file_type: "application/pdf",
-                                        uploaded_at: "2025-12-23T18:30:00",
-                                        is_verified: false
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    404: { description: "Work update not found" }
-                }
-            }
-        },
-        "/api/admin/timesheet/verify": {
-            post: {
-                summary: "Verify Work Update & Timesheet",
-                description: "Approve, flag, or reject work update after verification (Admin/HR only)",
-                tags: ["🔐 Admin Timesheet Verification"],
-                requestBody: {
-                    required: true,
-                    content: {
-                        "application/json": {
-                            schema: {
-                                type: "object",
-                                required: ["workUpdateId", "verificationStatus"],
-                                properties: {
-                                    workUpdateId: { type: "integer", example: 15 },
-                                    clientTimesheetId: { type: "integer", example: 8, description: "Optional - Client timesheet ID to mark as verified" },
-                                    verificationStatus: { type: "string", enum: ["approved", "flagged", "rejected"], example: "approved" },
-                                    verificationNotes: { type: "string", example: "All details verified and match client timesheet" },
-                                    hoursDiscrepancy: { type: "number", example: 0, description: "Hours difference if any" }
-                                }
-                            },
-                            example: {
-                                workUpdateId: 15,
-                                clientTimesheetId: 8,
-                                verificationStatus: "approved",
-                                verificationNotes: "Verified successfully - all data matches client timesheet",
-                                hoursDiscrepancy: 0
-                            }
-                        }
-                    }
-                },
-                responses: {
-                    200: {
-                        description: "Verification recorded successfully",
-                        content: {
-                            "application/json": {
-                                example: {
-                                    success: true,
-                                    message: "Work update approved successfully"
-                                }
-                            }
-                        }
-                    },
-                    400: { description: "Invalid verification status" },
-                    403: { description: "Admin/HR access required" }
-                }
-            }
-        },
-        "/api/admin/timesheet/bulk-verify": {
-            post: {
-                summary: "Bulk Verify Multiple Updates",
-                description: "Approve multiple work updates at once (Admin/HR only)",
-                tags: ["🔐 Admin Timesheet Verification"],
-                requestBody: {
-                    required: true,
-                    content: {
-                        "application/json": {
-                            schema: {
-                                type: "object",
-                                required: ["workUpdateIds", "verificationStatus"],
-                                properties: {
-                                    workUpdateIds: { type: "array", items: { type: "integer" }, example: [15, 16, 17] },
-                                    verificationStatus: { type: "string", enum: ["approved", "flagged"], example: "approved" },
-                                    verificationNotes: { type: "string", example: "Bulk approved - all compliant" }
-                                }
-                            },
-                            example: {
-                                workUpdateIds: [15, 16, 17, 18],
-                                verificationStatus: "approved",
-                                verificationNotes: "Bulk verification - all timesheets match work updates"
-                            }
-                        }
-                    }
-                },
-                responses: {
-                    200: {
-                        description: "Bulk verification completed",
-                        content: {
-                            "application/json": {
-                                example: {
-                                    success: true,
-                                    message: "3 work updates verified successfully"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/admin/timesheet/payroll-lock-status": {
-            get: {
-                summary: "Get Payroll Period Lock Status",
-                description: "Get lock status for payroll periods (Admin/HR only)",
-                tags: ["🔐 Admin Timesheet Verification"],
-                responses: {
-                    200: {
-                        description: "List of payroll period locks",
-                        content: {
-                            "application/json": {
-                                example: {
-                                    locks: [
-                                        {
-                                            id: 1,
-                                            payroll_period: "2025-12",
-                                            lock_status: "open",
-                                            pending_verifications: 5,
-                                            flagged_submissions: 2,
-                                            locked_by: null,
-                                            locked_at: null
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/admin/timesheet/lock-payroll-period": {
-            post: {
-                summary: "Lock Payroll Period",
-                description: "Lock payroll period after all verifications complete (Admin only)",
-                tags: ["🔐 Admin Timesheet Verification"],
-                requestBody: {
-                    required: true,
-                    content: {
-                        "application/json": {
-                            schema: {
-                                type: "object",
-                                required: ["payrollPeriod"],
-                                properties: {
-                                    payrollPeriod: { type: "string", example: "2025-12", description: "Format: YYYY-MM" },
-                                    lockStatus: { type: "string", enum: ["review", "locked", "processed"], example: "locked" }
-                                }
-                            },
-                            example: {
-                                payrollPeriod: "2025-12",
-                                lockStatus: "locked"
-                            }
-                        }
-                    }
-                },
-                responses: {
-                    200: {
-                        description: "Payroll period locked",
-                        content: {
-                            "application/json": {
-                                example: {
-                                    success: true,
-                                    message: "Payroll period 2025-12 locked successfully"
-                                }
-                            }
-                        }
-                    },
-                    400: { description: "Cannot lock - pending verifications exist" },
-                    403: { description: "Admin access required" }
-                }
-            }
         }
     }
 };
-
-module.exports = swaggerSpec;
 
 module.exports = swaggerSpec;
